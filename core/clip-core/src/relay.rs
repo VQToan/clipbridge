@@ -147,6 +147,7 @@ impl RelayConnection {
     /// Formats the target URL with optional `since` query parameter and sets
     /// required handshake headers (`Authorization`, `X-ClipBridge-Group`, `X-ClipBridge-Device`).
     pub async fn connect(cfg: &RelayConfig) -> Result<Self> {
+        let _ = rustls::crypto::ring::default_provider().install_default();
         let base = cfg.base_url.trim_end_matches('/');
         let url_str = match &cfg.since {
             Some(since) => format!("{base}/v1/ws?since={since}"),

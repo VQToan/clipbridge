@@ -19,6 +19,7 @@ serde_bytes = "0.11.19"
 serde_json = "1.0.154"
 thiserror = "2.0.21"
 tokio = { version = "1.53.3", features = ["rt", "macros", "sync", "time", "net"], optional = true }
+rustls = { version = "0.23", features = ["ring"], optional = true }
 tokio-tungstenite = { version = "0.29.0", features = ["rustls-tls-webpki-roots"], optional = true }
 tracing = "0.1.44"
 ulid = "3.0.0"
@@ -27,7 +28,7 @@ zeroize = { version = "1.8.1", features = ["zeroize_derive"] }
 
 [features]
 default = []
-relay = ["dep:tokio", "dep:tokio-tungstenite", "dep:futures-util"]
+relay = ["dep:tokio", "dep:tokio-tungstenite", "dep:futures-util", "dep:rustls"]
 
 [dev-dependencies]
 tempfile = "3.27.0"
