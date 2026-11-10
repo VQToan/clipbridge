@@ -42,10 +42,21 @@ class SyncEngine private constructor(private val context: Context) {
     private val echoGuard = FfiEchoGuard()
     private var relayClient: FfiRelayClient? = null
     private var syncJob: Job? = null
+    private var bleManager: BleSyncManager? = null
 
     init {
         setupHistory()
+        setupBleManager()
         loadConfigOrCreate()
+    }
+
+    private fun setupBleManager() {
+        bleManager = BleSyncManager(context) { envelope ->
+            scope.launch {
+                val key = groupKey ?: return@launch
+                handleIncomingEnvelope(envelope, key, "BLE")
+            }
+        }
     }
 
     private fun setupHistory() {
@@ -78,7 +89,9 @@ class SyncEngine private constructor(private val context: Context) {
 
         if (savedKey != null) {
             try {
-                groupKey = FfiGroupKey.fromBase64url(savedKey)
+                val key = FfiGroupKey.fromBase64url(savedKey)
+                groupKey = key
+                bleManager?.updateGroupKey(key)
                 startSync()
             } catch (e: Exception) {
                 Log.e(TAG, "Invalid saved group key", e)
@@ -88,6 +101,7 @@ class SyncEngine private constructor(private val context: Context) {
             val key = FfiGroupKey.generate()
             groupKey = key
             prefs.edit().putString("group_key", key.toBase64url()).apply()
+            bleManager?.updateGroupKey(key)
             startSync()
         }
     }
@@ -130,12 +144,18 @@ class SyncEngine private constructor(private val context: Context) {
 
     suspend fun publishText(text: String) = withContext(Dispatchers.IO) {
         val key = groupKey ?: return@withContext
-        val client = relayClient ?: return@withContext
         try {
             val payload = FfiClipPayload.text(text)
             if (echoGuard.shouldPublish(payload.hash())) {
                 val envelope = FfiEnvelope.seal(key, deviceId, payload)
-                client.publish(envelope)
+
+                // 1. Send via BLE to nearby devices
+                bleManager?.broadcastEnvelope(envelope)
+
+                // 2. Send via Relay WebSocket
+                relayClient?.let { client ->
+                    try { client.publish(envelope) } catch (e: Exception) { Log.w(TAG, "Relay publish failed", e) }
+                }
 
                 val entry = FfiHistoryEntry(
                     id = envelope.id(),
@@ -221,31 +241,7 @@ class SyncEngine private constructor(private val context: Context) {
     private fun handleRelayEvent(event: FfiRelayEvent, key: FfiGroupKey) {
         when (event) {
             is FfiRelayEvent.Deliver -> {
-                val env = event.envelope
-                if (echoGuard.seenEnvelope(env.id())) return
-                try {
-                    val payload = env.open(key)
-                    echoGuard.markApplied(payload.hash())
-
-                    // Android allows background services to write to clipboard
-                    applyToSystemClipboard(payload)
-
-                    val entry = FfiHistoryEntry(
-                        id = env.id(),
-                        origin = env.sender(),
-                        kind = payload.kind(),
-                        mime = payload.mime(),
-                        hash = payload.hash(),
-                        size = payload.data().size.toULong(),
-                        createdAt = env.createdAt(),
-                        data = payload.data(),
-                        isRemote = true
-                    )
-                    history?.insert(entry)
-                    refreshHistory()
-                } catch (e: Exception) {
-                    Log.e(TAG, "Failed to decrypt envelope ${env.id()}", e)
-                }
+                handleIncomingEnvelope(event.envelope, key, "Relay")
             }
             is FfiRelayEvent.Ack -> {
                 Log.d(TAG, "Server ACK: ${event.id}")
@@ -253,6 +249,33 @@ class SyncEngine private constructor(private val context: Context) {
             is FfiRelayEvent.Error -> {
                 Log.w(TAG, "Server error: [${event.code}] ${event.message}")
             }
+        }
+    }
+
+    private fun handleIncomingEnvelope(env: FfiEnvelope, key: FfiGroupKey, source: String) {
+        if (echoGuard.seenEnvelope(env.id())) return
+        try {
+            val payload = env.open(key)
+            echoGuard.markApplied(payload.hash())
+
+            // Android allows background services to write to clipboard
+            applyToSystemClipboard(payload)
+
+            val entry = FfiHistoryEntry(
+                id = env.id(),
+                origin = "${env.sender()} ($source)",
+                kind = payload.kind(),
+                mime = payload.mime(),
+                hash = payload.hash(),
+                size = payload.data().size.toULong(),
+                createdAt = env.createdAt(),
+                data = payload.data(),
+                isRemote = true
+            )
+            history?.insert(entry)
+            refreshHistory()
+        } catch (e: Exception) {
+            Log.e(TAG, "Failed to decrypt envelope ${env.id()} via $source", e)
         }
     }
 
