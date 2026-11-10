@@ -24,8 +24,8 @@ import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
-import dev.clipbridge.uniffi.clip_ffi.FfiClipKind
-import dev.clipbridge.uniffi.clip_ffi.FfiHistoryEntry
+import uniffi.clip_ffi.FfiClipKind
+import uniffi.clip_ffi.FfiHistoryEntry
 import java.text.SimpleDateFormat
 import java.util.*
 
@@ -218,7 +218,7 @@ fun StatusCard(status: ConnectionStatus, engine: SyncEngine) {
 }
 
 @Composable
-fun ClipItemCard(entry: FfiHistoryEntry, onClick: () -> Void?) {
+fun ClipItemCard(entry: FfiHistoryEntry, onClick: () -> Unit) {
     Card(
         modifier = Modifier
             .fillMaxWidth()
