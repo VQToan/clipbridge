@@ -1,0 +1,20 @@
+[package]
+name = "clip-ffi"
+edition.workspace = true
+version.workspace = true
+license.workspace = true
+rust-version.workspace = true
+
+[lib]
+crate-type = ["lib", "cdylib", "staticlib"]
+
+[dependencies]
+clip-core = { path = "../clip-core", features = ["relay"] }
+uniffi = { version = "0.32", features = ["cli", "tokio"] }
+tokio = { version = "1.53", features = ["rt-multi-thread", "sync"] }
+anyhow = "1.0"
+thiserror = "2.0"
+
+[[bin]]
+name = "uniffi-bindgen"
+path = "uniffi-bindgen.rs"
