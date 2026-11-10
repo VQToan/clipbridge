@@ -35,7 +35,7 @@ class SyncEngine private constructor(private val context: Context) {
         private set
     var deviceId: String = ""
         private set
-    var relayUrl: String = "ws://10.0.2.2:8080"
+    var relayUrl: String = "wss://clipbridge-relay.vqtoan1807.workers.dev"
         private set
 
     private var history: FfiHistory? = null
@@ -82,7 +82,7 @@ class SyncEngine private constructor(private val context: Context) {
 
     private fun loadConfigOrCreate() {
         val savedKey = prefs.getString("group_key", null)
-        relayUrl = prefs.getString("relay_url", "ws://10.0.2.2:8080") ?: "ws://10.0.2.2:8080"
+        relayUrl = prefs.getString("relay_url", "wss://clipbridge-relay.vqtoan1807.workers.dev") ?: "wss://clipbridge-relay.vqtoan1807.workers.dev"
         deviceId = prefs.getString("device_id", null) ?: ffiNewDeviceId().also {
             prefs.edit().putString("device_id", it).apply()
         }
@@ -279,8 +279,50 @@ class SyncEngine private constructor(private val context: Context) {
         }
     }
 
+    private val clipListener = ClipboardManager.OnPrimaryClipChangedListener {
+        checkAndSyncClipboard()
+    }
+
+    fun registerClipListener() {
+        try {
+            clipboard.addPrimaryClipChangedListener(clipListener)
+        } catch (e: Exception) {
+            Log.w(TAG, "Failed to register clip listener", e)
+        }
+    }
+
+    fun unregisterClipListener() {
+        try {
+            clipboard.removePrimaryClipChangedListener(clipListener)
+        } catch (e: Exception) {
+            Log.w(TAG, "Failed to unregister clip listener", e)
+        }
+    }
+
+    fun checkAndSyncClipboard(): Boolean {
+        try {
+            val clip = clipboard.primaryClip ?: return false
+            if (clip.itemCount == 0) return false
+            val item = clip.getItemAt(0)
+            val text = item.coerceToText(context)?.toString()
+            if (!text.isNullOrBlank()) {
+                val payload = FfiClipPayload.text(text)
+                if (echoGuard.shouldPublish(payload.hash())) {
+                    scope.launch {
+                        publishText(text)
+                    }
+                    return true
+                }
+            }
+        } catch (e: Exception) {
+            Log.e(TAG, "Failed to read system clipboard", e)
+        }
+        return false
+    }
+
     private fun applyToSystemClipboard(payload: FfiClipPayload) {
         try {
+            echoGuard.markApplied(payload.hash())
             when (payload.kind()) {
                 FfiClipKind.TEXT -> {
                     val text = payload.asText() ?: String(payload.data(), Charsets.UTF_8)

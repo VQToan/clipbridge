@@ -52,12 +52,12 @@
             </intent-filter>
         </service>
 
-        <!-- Trampoline Activity: Briefly takes window focus to legally read clipboard from QS Tile -->
+        <!-- Trampoline Activity: Briefly takes window focus to legally read clipboard from QS Tile & Notification -->
         <activity
             android:name=".ClipSyncTrampolineActivity"
             android:theme="@android:style/Theme.Translucent.NoTitleBar"
             android:excludeFromRecents="true"
-            android:exported="false" />
+            android:exported="true" />
 
         <!-- Highlighted Text Menu Action: ACTION_PROCESS_TEXT -->
         <activity

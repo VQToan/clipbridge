@@ -16,6 +16,7 @@ import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.*
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
+import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
@@ -54,11 +55,31 @@ class MainActivity : ComponentActivity() {
             }
         }
     }
+
+    override fun onResume() {
+        super.onResume()
+        val engine = SyncEngine.getInstance(this)
+        engine.registerClipListener()
+        engine.checkAndSyncClipboard()
+    }
+
+    override fun onWindowFocusChanged(hasFocus: Boolean) {
+        super.onWindowFocusChanged(hasFocus)
+        if (hasFocus) {
+            SyncEngine.getInstance(this).checkAndSyncClipboard()
+        }
+    }
+
+    override fun onPause() {
+        super.onPause()
+        SyncEngine.getInstance(this).unregisterClipListener()
+    }
 }
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
 fun MainScreen(engine: SyncEngine) {
+    val context = LocalContext.current
     val status by engine.status.collectAsState()
     val clips by engine.recentClips.collectAsState()
     var showJoinDialog by remember { mutableStateOf(false) }
@@ -91,18 +112,34 @@ fun MainScreen(engine: SyncEngine) {
             ) {
                 Button(
                     onClick = {
+                        val synced = engine.checkAndSyncClipboard()
+                        if (synced) {
+                            Toast.makeText(context, "Clipboard synced to peers! 🚀", Toast.LENGTH_SHORT).show()
+                        } else {
+                            Toast.makeText(context, "Clipboard already synced or empty", Toast.LENGTH_SHORT).show()
+                        }
+                    },
+                    modifier = Modifier.weight(1.2f)
+                ) {
+                    Icon(Icons.Default.CloudUpload, contentDescription = null, modifier = Modifier.size(16.dp))
+                    Spacer(Modifier.width(4.dp))
+                    Text("Sync Now", fontSize = 12.sp)
+                }
+
+                OutlinedButton(
+                    onClick = {
                         val uri = engine.getPairingUri()
                         if (uri != null) {
-                            val clipboard = engine.run {
-                                // copy pairing URI
-                            }
+                            val cm = context.getSystemService(Context.CLIPBOARD_SERVICE) as ClipboardManager
+                            cm.setPrimaryClip(ClipData.newPlainText("ClipBridge Pairing", uri))
+                            Toast.makeText(context, "Pairing link copied!", Toast.LENGTH_SHORT).show()
                         }
                     },
                     modifier = Modifier.weight(1f)
                 ) {
                     Icon(Icons.Default.Share, contentDescription = null, modifier = Modifier.size(16.dp))
                     Spacer(Modifier.width(4.dp))
-                    Text("Share Pair", fontSize = 12.sp)
+                    Text("Share", fontSize = 12.sp)
                 }
 
                 OutlinedButton(
