@@ -35,11 +35,13 @@ final class SyncEngine: ObservableObject {
     @Published var recentItems: [FfiHistoryEntry] = []
     @Published var config: AppConfig?
     @Published var statusMessage: String = ""
+    @Published var nearbyBlePeersCount: Int = 0
 
     private var groupKey: FfiGroupKey?
     private var history: FfiHistory?
     private let echoGuard = FfiEchoGuard()
     private var relayClient: FfiRelayClient?
+    private var bleManager: BleSyncManager?
 
     private var pasteboardTimer: Timer?
     private var lastChangeCount: Int = 0
@@ -47,7 +49,17 @@ final class SyncEngine: ObservableObject {
 
     init() {
         setupHistory()
+        setupBleManager()
         loadConfigOrCreate()
+    }
+
+    private func setupBleManager() {
+        self.bleManager = BleSyncManager { [weak self] envelope in
+            Task { @MainActor [weak self] in
+                guard let self = self, let key = self.groupKey else { return }
+                self.handleIncomingEnvelope(envelope, key: key, source: "BLE")
+            }
+        }
     }
 
     private func setupHistory() {
@@ -116,7 +128,9 @@ final class SyncEngine: ObservableObject {
 
     private func applyConfig(_ cfg: AppConfig) {
         do {
-            self.groupKey = try FfiGroupKey.fromBase64url(s: cfg.groupKey)
+            let key = try FfiGroupKey.fromBase64url(s: cfg.groupKey)
+            self.groupKey = key
+            self.bleManager?.updateGroupKey(key)
             startSync()
         } catch {
             self.state = .disconnected
@@ -196,10 +210,16 @@ final class SyncEngine: ObservableObject {
     }
 
     private func publishPayload(_ payload: FfiClipPayload, key: FfiGroupKey, sender: String) async {
-        guard let client = relayClient else { return }
         do {
             let env = try FfiEnvelope.seal(key: key, sender: sender, payload: payload)
-            try await client.publish(envelope: env)
+
+            // 1. Send via BLE to nearby peers immediately
+            bleManager?.broadcastEnvelope(env)
+
+            // 2. Also send via Relay WebSocket if connected
+            if let client = relayClient {
+                try? await client.publish(envelope: env)
+            }
 
             // Save to local history
             let entry = FfiHistoryEntry(
@@ -266,47 +286,49 @@ final class SyncEngine: ObservableObject {
     private func handleRelayEvent(_ event: FfiRelayEvent, key: FfiGroupKey) {
         switch event {
         case .deliver(let env):
-            if echoGuard.seenEnvelope(id: env.id()) { return }
-            do {
-                let payload = try env.open(key: key)
-                echoGuard.markApplied(hash: payload.hash())
-
-                // Write to system pasteboard
-                let pb = NSPasteboard.general
-                pb.clearContents()
-                switch payload.kind() {
-                case .text:
-                    if let text = payload.asText() {
-                        pb.setString(text, forType: .string)
-                    }
-                case .image:
-                    pb.setData(payload.data(), forType: .png)
-                }
-                lastChangeCount = pb.changeCount
-
-                // Store in history
-                let entry = FfiHistoryEntry(
-                    id: env.id(),
-                    origin: env.sender(),
-                    kind: payload.kind(),
-                    mime: payload.mime(),
-                    hash: payload.hash(),
-                    size: UInt64(payload.data().count),
-                    createdAt: env.createdAt(),
-                    data: payload.data(),
-                    isRemote: true
-                )
-                try? history?.insert(entry: entry)
-                refreshHistory()
-            } catch {
-                print("Failed to decrypt envelope from \(env.sender()):", error)
-            }
-
+            handleIncomingEnvelope(env, key: key, source: "Relay")
         case .ack(let id):
             print("Server ACK:", id)
-
         case .error(let code, let msg, let id):
             print("Server Error: [\(code)] \(msg) id=\(id ?? "none")")
+        }
+    }
+
+    func handleIncomingEnvelope(_ env: FfiEnvelope, key: FfiGroupKey, source: String) {
+        if echoGuard.seenEnvelope(id: env.id()) { return }
+        do {
+            let payload = try env.open(key: key)
+            echoGuard.markApplied(hash: payload.hash())
+
+            // Write to system pasteboard
+            let pb = NSPasteboard.general
+            pb.clearContents()
+            switch payload.kind() {
+            case .text:
+                if let text = payload.asText() {
+                    pb.setString(text, forType: .string)
+                }
+            case .image:
+                pb.setData(payload.data(), forType: .png)
+            }
+            lastChangeCount = pb.changeCount
+
+            // Store in history
+            let entry = FfiHistoryEntry(
+                id: env.id(),
+                origin: "\(env.sender()) (\(source))",
+                kind: payload.kind(),
+                mime: payload.mime(),
+                hash: payload.hash(),
+                size: UInt64(payload.data().count),
+                createdAt: env.createdAt(),
+                data: payload.data(),
+                isRemote: true
+            )
+            try? history?.insert(entry: entry)
+            refreshHistory()
+        } catch {
+            print("Failed to decrypt envelope from \(env.sender()) via \(source):", error)
         }
     }
 
