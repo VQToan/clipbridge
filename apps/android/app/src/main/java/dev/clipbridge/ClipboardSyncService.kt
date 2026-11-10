@@ -12,7 +12,15 @@ import android.os.Build
 import android.os.IBinder
 import androidx.core.app.NotificationCompat
 
+import kotlinx.coroutines.CoroutineScope
+import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.SupervisorJob
+import kotlinx.coroutines.cancel
+
 class ClipboardSyncService : Service() {
+
+    private val serviceScope = CoroutineScope(SupervisorJob() + Dispatchers.IO)
+    private var logcatMonitor: LogcatClipboardMonitor? = null
 
     override fun onCreate() {
         super.onCreate()
@@ -21,6 +29,16 @@ class ClipboardSyncService : Service() {
 
         val engine = SyncEngine.getInstance(this)
         engine.startSync()
+
+        logcatMonitor = LogcatClipboardMonitor(this).also {
+            it.start(serviceScope)
+        }
+    }
+
+    override fun onDestroy() {
+        super.onDestroy()
+        logcatMonitor?.stop()
+        serviceScope.cancel()
     }
 
     override fun onStartCommand(intent: Intent?, flags: Int, startId: Int): Int {
