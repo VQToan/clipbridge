@@ -1,0 +1,4 @@
+<resources>
+    <string name="app_name">ClipBridge</string>
+    <string name="tile_label">Sync Clipboard</string>
+</resources>
