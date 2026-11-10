@@ -74,7 +74,7 @@ final class BleSyncManager: NSObject, ObservableObject {
 
     // MARK: - Peripheral Management
     private func restartAdvertisingIfReady() {
-        guard peripheralManager.state == .poweredOn, let token = beaconToken else { return }
+        guard peripheralManager.state == .poweredOn, beaconToken != nil else { return }
         peripheralManager.stopAdvertising()
 
         // Setup GATT Service & Characteristic
@@ -92,11 +92,11 @@ final class BleSyncManager: NSObject, ObservableObject {
         peripheralManager.removeAllServices()
         peripheralManager.add(service)
 
-        // Advertise with custom service and beacon token in ServiceData
+        // Advertise with custom service UUID and local name
+        // Note: macOS CBPeripheralManager only supports CBAdvertisementDataServiceUUIDsKey and CBAdvertisementDataLocalNameKey
         let advertisementData: [String: Any] = [
             CBAdvertisementDataServiceUUIDsKey: [serviceUUID!],
-            CBAdvertisementDataLocalNameKey: "ClipBridge",
-            CBAdvertisementDataServiceDataKey: [serviceUUID!: token]
+            CBAdvertisementDataLocalNameKey: "ClipBridge"
         ]
         peripheralManager.startAdvertising(advertisementData)
     }

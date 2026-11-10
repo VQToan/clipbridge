@@ -159,11 +159,13 @@ final class SyncEngine: ObservableObject {
     private func startWatcher() {
         lastChangeCount = NSPasteboard.general.changeCount
         pasteboardTimer?.invalidate()
-        pasteboardTimer = Timer.scheduledTimer(withTimeInterval: 0.4, repeats: true) { [weak self] _ in
+        let timer = Timer(timeInterval: 0.4, repeats: true) { [weak self] _ in
             Task { @MainActor [weak self] in
                 self?.pollPasteboard()
             }
         }
+        RunLoop.main.add(timer, forMode: .common)
+        pasteboardTimer = timer
     }
 
     private func stopWatcher() {
