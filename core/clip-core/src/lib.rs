@@ -6,6 +6,7 @@
 //! wire protocol formatting, local history storage via SQLite, deduplication guards, image normalization,
 //! and optional WebSocket relay client connectivity.
 
+pub mod ble;
 pub mod envelope;
 pub mod error;
 pub mod guard;
@@ -17,6 +18,10 @@ pub mod pairing;
 pub mod relay;
 pub mod storage;
 
+pub use ble::{
+    ble_beacon_token, chunk_envelope, BleChunk, BleReassembler, BLE_CHUNK_PAYLOAD_SIZE,
+    CLIPBRIDGE_BLE_CHAR_UUID, CLIPBRIDGE_BLE_SERVICE_UUID,
+};
 pub use envelope::{Envelope, ENVELOPE_VERSION, XCHACHA_NONCE_LEN};
 pub use error::{CoreError, Result};
 pub use guard::{EchoGuard, ECHO_GUARD_CAPACITY};
