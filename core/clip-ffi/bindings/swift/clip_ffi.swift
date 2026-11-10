@@ -618,6 +618,138 @@ fileprivate struct FfiConverterData: FfiConverterRustBuffer {
 
 
 /**
+ * Bounded reassembler for incoming BLE chunks into complete envelopes.
+ */
+public protocol FfiBleReassemblerProtocol: AnyObject, Sendable {
+    
+    func pushChunk(chunkBytes: Data) throws  -> FfiEnvelope?
+    
+}
+/**
+ * Bounded reassembler for incoming BLE chunks into complete envelopes.
+ */
+open class FfiBleReassembler: FfiBleReassemblerProtocol, @unchecked Sendable {
+    fileprivate let handle: UInt64
+
+    /// Used to instantiate a [FFIObject] without an actual handle, for fakes in tests, mostly.
+#if swift(>=5.8)
+    @_documentation(visibility: private)
+#endif
+    public struct NoHandle {
+        public init() {}
+    }
+
+    // TODO: We'd like this to be `private` but for Swifty reasons,
+    // we can't implement `FfiConverter` without making this `required` and we can't
+    // make it `required` without making it `public`.
+#if swift(>=5.8)
+    @_documentation(visibility: private)
+#endif
+    required public init(unsafeFromHandle handle: UInt64) {
+        self.handle = handle
+    }
+
+    // This constructor can be used to instantiate a fake object.
+    // - Parameter noHandle: Placeholder value so we can have a constructor separate from the default empty one that may be implemented for classes extending [FFIObject].
+    //
+    // - Warning:
+    //     Any object instantiated with this constructor cannot be passed to an actual Rust-backed object. Since there isn't a backing handle the FFI lower functions will crash.
+#if swift(>=5.8)
+    @_documentation(visibility: private)
+#endif
+    public init(noHandle: NoHandle) {
+        self.handle = 0
+    }
+
+#if swift(>=5.8)
+    @_documentation(visibility: private)
+#endif
+    public func uniffiCloneHandle() -> UInt64 {
+        return try! rustCall { uniffi_clip_ffi_fn_clone_ffiblereassembler(self.handle, $0) }
+    }
+public convenience init() {
+    let handle =
+        try! rustCall() {
+        uniffiCallStatus in
+    uniffi_clip_ffi_fn_constructor_ffiblereassembler_new(uniffiCallStatus
+    )
+}
+    self.init(unsafeFromHandle: handle)
+}
+
+    deinit {
+        if handle == 0 {
+            // Mock objects have handle=0 don't try to free them
+            return
+        }
+
+        try! rustCall { uniffi_clip_ffi_fn_free_ffiblereassembler(handle, $0) }
+    }
+
+    
+
+    
+open func pushChunk(chunkBytes: Data)throws  -> FfiEnvelope?  {
+    return try  FfiConverterOptionTypeFfiEnvelope.lift(try rustCallWithError(FfiConverterTypeFfiError_lift) {
+        uniffiCallStatus in
+    uniffi_clip_ffi_fn_method_ffiblereassembler_push_chunk(
+            self.uniffiCloneHandle(),
+        FfiConverterData.lower(chunkBytes),uniffiCallStatus
+    )
+})
+}
+    
+
+    
+}
+
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+public struct FfiConverterTypeFfiBleReassembler: FfiConverter {
+    typealias FfiType = UInt64
+    typealias SwiftType = FfiBleReassembler
+
+    public static func lift(_ handle: UInt64) throws -> FfiBleReassembler {
+        return FfiBleReassembler(unsafeFromHandle: handle)
+    }
+
+    public static func lower(_ value: FfiBleReassembler) -> UInt64 {
+        return value.uniffiCloneHandle()
+    }
+
+    public static func read(from buf: inout (data: Data, offset: Data.Index)) throws -> FfiBleReassembler {
+        let handle: UInt64 = try readInt(&buf)
+        return try lift(handle)
+    }
+
+    public static func write(_ value: FfiBleReassembler, into buf: inout [UInt8]) {
+        writeInt(&buf, lower(value))
+    }
+}
+
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+public func FfiConverterTypeFfiBleReassembler_lift(_ handle: UInt64) throws -> FfiBleReassembler {
+    return try FfiConverterTypeFfiBleReassembler.lift(handle)
+}
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+public func FfiConverterTypeFfiBleReassembler_lower(_ value: FfiBleReassembler) -> UInt64 {
+    return FfiConverterTypeFfiBleReassembler.lower(value)
+}
+
+
+
+
+
+
+/**
  * Decrypted clipboard payload.
  */
 public protocol FfiClipPayloadProtocol: AnyObject, Sendable {
@@ -2470,6 +2602,30 @@ fileprivate struct FfiConverterOptionData: FfiConverterRustBuffer {
 #if swift(>=5.8)
 @_documentation(visibility: private)
 #endif
+fileprivate struct FfiConverterOptionTypeFfiEnvelope: FfiConverterRustBuffer {
+    typealias SwiftType = FfiEnvelope?
+
+    public static func write(_ value: SwiftType, into buf: inout [UInt8]) {
+        guard let value = value else {
+            writeInt(&buf, Int8(0))
+            return
+        }
+        writeInt(&buf, Int8(1))
+        FfiConverterTypeFfiEnvelope.write(value, into: &buf)
+    }
+
+    public static func read(from buf: inout (data: Data, offset: Data.Index)) throws -> SwiftType {
+        switch try readInt(&buf) as Int8 {
+        case 0: return nil
+        case 1: return try FfiConverterTypeFfiEnvelope.read(from: &buf)
+        default: throw UniffiInternalError.unexpectedOptionalTag
+        }
+    }
+}
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
 fileprivate struct FfiConverterOptionTypeFfiRelayEvent: FfiConverterRustBuffer {
     typealias SwiftType = FfiRelayEvent?
 
@@ -2488,6 +2644,31 @@ fileprivate struct FfiConverterOptionTypeFfiRelayEvent: FfiConverterRustBuffer {
         case 1: return try FfiConverterTypeFfiRelayEvent.read(from: &buf)
         default: throw UniffiInternalError.unexpectedOptionalTag
         }
+    }
+}
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+fileprivate struct FfiConverterSequenceData: FfiConverterRustBuffer {
+    typealias SwiftType = [Data]
+
+    public static func write(_ value: [Data], into buf: inout [UInt8]) {
+        let len = Int32(value.count)
+        writeInt(&buf, len)
+        for item in value {
+            FfiConverterData.write(item, into: &buf)
+        }
+    }
+
+    public static func read(from buf: inout (data: Data, offset: Data.Index)) throws -> [Data] {
+        let len: Int32 = try readInt(&buf)
+        var seq = [Data]()
+        seq.reserveCapacity(Int(len))
+        for _ in 0 ..< len {
+            seq.append(try FfiConverterData.read(from: &buf))
+        }
+        return seq
     }
 }
 
@@ -2564,6 +2745,49 @@ fileprivate func uniffiFutureContinuationCallback(handle: UInt64, pollResult: In
     }
 }
 /**
+ * Derives a 16-byte BLE beacon identification token from the shared group key.
+ */
+public func ffiBleBeaconToken(key: FfiGroupKey) -> Data  {
+    return try!  FfiConverterData.lift(try! rustCall() {
+        uniffiCallStatus in
+    uniffi_clip_ffi_fn_func_ffi_ble_beacon_token(
+        FfiConverterTypeFfiGroupKey_lower(key),uniffiCallStatus
+    )
+})
+}
+/**
+ * Returns the ClipBridge 128-bit BLE Characteristic UUID string for chunk transport.
+ */
+public func ffiBleCharUuid() -> String  {
+    return try!  FfiConverterString.lift(try! rustCall() {
+        uniffiCallStatus in
+    uniffi_clip_ffi_fn_func_ffi_ble_char_uuid(uniffiCallStatus
+    )
+})
+}
+/**
+ * Serializes and chunks an envelope into binary BLE chunk payloads of up to `max_payload_size` bytes.
+ */
+public func ffiBleChunkEnvelope(envelope: FfiEnvelope, maxPayloadSize: UInt32)throws  -> [Data]  {
+    return try  FfiConverterSequenceData.lift(try rustCallWithError(FfiConverterTypeFfiError_lift) {
+        uniffiCallStatus in
+    uniffi_clip_ffi_fn_func_ffi_ble_chunk_envelope(
+        FfiConverterTypeFfiEnvelope_lower(envelope),
+        FfiConverterUInt32.lower(maxPayloadSize),uniffiCallStatus
+    )
+})
+}
+/**
+ * Returns the ClipBridge 128-bit BLE Service UUID string.
+ */
+public func ffiBleServiceUuid() -> String  {
+    return try!  FfiConverterString.lift(try! rustCall() {
+        uniffiCallStatus in
+    uniffi_clip_ffi_fn_func_ffi_ble_service_uuid(uniffiCallStatus
+    )
+})
+}
+/**
  * Generates a new random unique device identifier formatted as a ULID string.
  */
 public func ffiNewDeviceId() -> String  {
@@ -2623,6 +2847,18 @@ private let initializationResult: InitializationResult = {
     if bindings_contract_version != scaffolding_contract_version {
         return InitializationResult.contractVersionMismatch
     }
+    if (uniffi_clip_ffi_checksum_func_ffi_ble_beacon_token() != 39247) {
+        return InitializationResult.apiChecksumMismatch
+    }
+    if (uniffi_clip_ffi_checksum_func_ffi_ble_char_uuid() != 50434) {
+        return InitializationResult.apiChecksumMismatch
+    }
+    if (uniffi_clip_ffi_checksum_func_ffi_ble_chunk_envelope() != 33119) {
+        return InitializationResult.apiChecksumMismatch
+    }
+    if (uniffi_clip_ffi_checksum_func_ffi_ble_service_uuid() != 37228) {
+        return InitializationResult.apiChecksumMismatch
+    }
     if (uniffi_clip_ffi_checksum_func_ffi_new_device_id() != 39986) {
         return InitializationResult.apiChecksumMismatch
     }
@@ -2633,6 +2869,9 @@ private let initializationResult: InitializationResult = {
         return InitializationResult.apiChecksumMismatch
     }
     if (uniffi_clip_ffi_checksum_func_ffi_rgba_to_png() != 58890) {
+        return InitializationResult.apiChecksumMismatch
+    }
+    if (uniffi_clip_ffi_checksum_method_ffiblereassembler_push_chunk() != 2254) {
         return InitializationResult.apiChecksumMismatch
     }
     if (uniffi_clip_ffi_checksum_method_fficlippayload_as_text() != 42510) {
@@ -2738,6 +2977,9 @@ private let initializationResult: InitializationResult = {
         return InitializationResult.apiChecksumMismatch
     }
     if (uniffi_clip_ffi_checksum_method_ffirelayclient_publish() != 4911) {
+        return InitializationResult.apiChecksumMismatch
+    }
+    if (uniffi_clip_ffi_checksum_constructor_ffiblereassembler_new() != 58695) {
         return InitializationResult.apiChecksumMismatch
     }
     if (uniffi_clip_ffi_checksum_constructor_fficlippayload_image() != 15934) {

@@ -563,6 +563,60 @@ pub fn ffi_rgba_to_png(width: u32, height: u32, rgba: Vec<u8>) -> Result<Vec<u8>
     Ok(clip_core::rgba_to_png(width, height, &rgba)?)
 }
 
+/// Returns the ClipBridge 128-bit BLE Service UUID string.
+#[uniffi::export]
+pub fn ffi_ble_service_uuid() -> String {
+    clip_core::CLIPBRIDGE_BLE_SERVICE_UUID.to_string()
+}
+
+/// Returns the ClipBridge 128-bit BLE Characteristic UUID string for chunk transport.
+#[uniffi::export]
+pub fn ffi_ble_char_uuid() -> String {
+    clip_core::CLIPBRIDGE_BLE_CHAR_UUID.to_string()
+}
+
+/// Derives a 16-byte BLE beacon identification token from the shared group key.
+#[uniffi::export]
+pub fn ffi_ble_beacon_token(key: &FfiGroupKey) -> Vec<u8> {
+    clip_core::ble_beacon_token(&key.inner).to_vec()
+}
+
+/// Serializes and chunks an envelope into binary BLE chunk payloads of up to `max_payload_size` bytes.
+#[uniffi::export]
+pub fn ffi_ble_chunk_envelope(
+    envelope: &FfiEnvelope,
+    max_payload_size: u32,
+) -> Result<Vec<Vec<u8>>, FfiError> {
+    let chunks = clip_core::chunk_envelope(&envelope.inner, max_payload_size as usize)?;
+    Ok(chunks.into_iter().map(|c| c.to_bytes()).collect())
+}
+
+/// Bounded reassembler for incoming BLE chunks into complete envelopes.
+#[derive(Default, uniffi::Object)]
+pub struct FfiBleReassembler {
+    inner: Mutex<clip_core::BleReassembler>,
+}
+
+#[uniffi::export]
+impl FfiBleReassembler {
+    #[uniffi::constructor]
+    pub fn new() -> Arc<Self> {
+        Arc::new(Self {
+            inner: Mutex::new(clip_core::BleReassembler::new()),
+        })
+    }
+
+    pub fn push_chunk(&self, chunk_bytes: Vec<u8>) -> Result<Option<Arc<FfiEnvelope>>, FfiError> {
+        let chunk = clip_core::BleChunk::from_bytes(&chunk_bytes)?;
+        let mut reassembler = self
+            .inner
+            .lock()
+            .map_err(|e| FfiError::Generic { msg: e.to_string() })?;
+        let envelope = reassembler.push_chunk(chunk)?;
+        Ok(envelope.map(|inner| Arc::new(FfiEnvelope { inner })))
+    }
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -755,6 +809,62 @@ mod tests {
 
         let normalized = ffi_normalize_to_png(png).unwrap();
         assert!(normalized.starts_with(&[0x89, b'P', b'N', b'G']));
+    }
+
+    #[test]
+    fn test_ffi_ble_beacon_token() {
+        let key = FfiGroupKey::generate();
+        let token = ffi_ble_beacon_token(&key);
+        assert_eq!(token.len(), 16);
+
+        // Deterministic derivation for the same key
+        let token2 = ffi_ble_beacon_token(&key);
+        assert_eq!(token, token2);
+
+        // Distinct keys produce distinct tokens
+        let other_key = FfiGroupKey::generate();
+        let other_token = ffi_ble_beacon_token(&other_key);
+        assert_ne!(token, other_token);
+    }
+
+    #[test]
+    fn test_ffi_ble_chunk_and_reassemble_roundtrip() {
+        assert_eq!(ffi_ble_service_uuid(), clip_core::CLIPBRIDGE_BLE_SERVICE_UUID);
+        assert_eq!(ffi_ble_char_uuid(), clip_core::CLIPBRIDGE_BLE_CHAR_UUID);
+
+        let key = FfiGroupKey::generate();
+        let payload =
+            FfiClipPayload::text("Hello BLE round-trip clipboard payload test!".to_string())
+                .unwrap();
+        let env = FfiEnvelope::seal(&key, "test-device".to_string(), &payload).unwrap();
+
+        // Use a small payload size (50 bytes) to force partitioning into multiple chunks
+        let chunks = ffi_ble_chunk_envelope(&env, 50).unwrap();
+        assert!(chunks.len() > 1);
+
+        let reassembler = FfiBleReassembler::new();
+
+        let mut completed: Option<Arc<FfiEnvelope>> = None;
+        for (i, chunk_bytes) in chunks.iter().enumerate() {
+            let res = reassembler.push_chunk(chunk_bytes.clone()).unwrap();
+            if i < chunks.len() - 1 {
+                assert!(res.is_none());
+            } else {
+                completed = res;
+            }
+        }
+
+        let reconstructed = completed.expect("expected complete envelope on last chunk");
+        assert_eq!(reconstructed.id(), env.id());
+        assert_eq!(reconstructed.group_id(), env.group_id());
+        assert_eq!(reconstructed.sender(), env.sender());
+        assert_eq!(reconstructed.ciphertext(), env.ciphertext());
+
+        let decrypted = reconstructed.open(&key).unwrap();
+        assert_eq!(
+            decrypted.as_text(),
+            Some("Hello BLE round-trip clipboard payload test!".to_string())
+        );
     }
 }
 

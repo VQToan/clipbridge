@@ -243,6 +243,27 @@ typedef void (*UniffiForeignFutureCompleteVoid)(uint64_t, UniffiForeignFutureRes
     );
 
 #endif
+#ifndef UNIFFI_FFIDEF_UNIFFI_CLIP_FFI_FN_CLONE_FFIBLEREASSEMBLER
+#define UNIFFI_FFIDEF_UNIFFI_CLIP_FFI_FN_CLONE_FFIBLEREASSEMBLER
+uint64_t uniffi_clip_ffi_fn_clone_ffiblereassembler(uint64_t handle, RustCallStatus *_Nonnull out_status
+);
+#endif
+#ifndef UNIFFI_FFIDEF_UNIFFI_CLIP_FFI_FN_FREE_FFIBLEREASSEMBLER
+#define UNIFFI_FFIDEF_UNIFFI_CLIP_FFI_FN_FREE_FFIBLEREASSEMBLER
+void uniffi_clip_ffi_fn_free_ffiblereassembler(uint64_t handle, RustCallStatus *_Nonnull out_status
+);
+#endif
+#ifndef UNIFFI_FFIDEF_UNIFFI_CLIP_FFI_FN_CONSTRUCTOR_FFIBLEREASSEMBLER_NEW
+#define UNIFFI_FFIDEF_UNIFFI_CLIP_FFI_FN_CONSTRUCTOR_FFIBLEREASSEMBLER_NEW
+uint64_t uniffi_clip_ffi_fn_constructor_ffiblereassembler_new(RustCallStatus *_Nonnull out_status
+    
+);
+#endif
+#ifndef UNIFFI_FFIDEF_UNIFFI_CLIP_FFI_FN_METHOD_FFIBLEREASSEMBLER_PUSH_CHUNK
+#define UNIFFI_FFIDEF_UNIFFI_CLIP_FFI_FN_METHOD_FFIBLEREASSEMBLER_PUSH_CHUNK
+RustBuffer uniffi_clip_ffi_fn_method_ffiblereassembler_push_chunk(uint64_t ptr, RustBuffer chunk_bytes, RustCallStatus *_Nonnull out_status
+);
+#endif
 #ifndef UNIFFI_FFIDEF_UNIFFI_CLIP_FFI_FN_CLONE_FFICLIPPAYLOAD
 #define UNIFFI_FFIDEF_UNIFFI_CLIP_FFI_FN_CLONE_FFICLIPPAYLOAD
 uint64_t uniffi_clip_ffi_fn_clone_fficlippayload(uint64_t handle, RustCallStatus *_Nonnull out_status
@@ -561,6 +582,28 @@ uint64_t uniffi_clip_ffi_fn_method_ffirelayclient_next_event(uint64_t ptr
 uint64_t uniffi_clip_ffi_fn_method_ffirelayclient_publish(uint64_t ptr, uint64_t envelope
 );
 #endif
+#ifndef UNIFFI_FFIDEF_UNIFFI_CLIP_FFI_FN_FUNC_FFI_BLE_BEACON_TOKEN
+#define UNIFFI_FFIDEF_UNIFFI_CLIP_FFI_FN_FUNC_FFI_BLE_BEACON_TOKEN
+RustBuffer uniffi_clip_ffi_fn_func_ffi_ble_beacon_token(uint64_t key, RustCallStatus *_Nonnull out_status
+);
+#endif
+#ifndef UNIFFI_FFIDEF_UNIFFI_CLIP_FFI_FN_FUNC_FFI_BLE_CHAR_UUID
+#define UNIFFI_FFIDEF_UNIFFI_CLIP_FFI_FN_FUNC_FFI_BLE_CHAR_UUID
+RustBuffer uniffi_clip_ffi_fn_func_ffi_ble_char_uuid(RustCallStatus *_Nonnull out_status
+    
+);
+#endif
+#ifndef UNIFFI_FFIDEF_UNIFFI_CLIP_FFI_FN_FUNC_FFI_BLE_CHUNK_ENVELOPE
+#define UNIFFI_FFIDEF_UNIFFI_CLIP_FFI_FN_FUNC_FFI_BLE_CHUNK_ENVELOPE
+RustBuffer uniffi_clip_ffi_fn_func_ffi_ble_chunk_envelope(uint64_t envelope, uint32_t max_payload_size, RustCallStatus *_Nonnull out_status
+);
+#endif
+#ifndef UNIFFI_FFIDEF_UNIFFI_CLIP_FFI_FN_FUNC_FFI_BLE_SERVICE_UUID
+#define UNIFFI_FFIDEF_UNIFFI_CLIP_FFI_FN_FUNC_FFI_BLE_SERVICE_UUID
+RustBuffer uniffi_clip_ffi_fn_func_ffi_ble_service_uuid(RustCallStatus *_Nonnull out_status
+    
+);
+#endif
 #ifndef UNIFFI_FFIDEF_UNIFFI_CLIP_FFI_FN_FUNC_FFI_NEW_DEVICE_ID
 #define UNIFFI_FFIDEF_UNIFFI_CLIP_FFI_FN_FUNC_FFI_NEW_DEVICE_ID
 RustBuffer uniffi_clip_ffi_fn_func_ffi_new_device_id(RustCallStatus *_Nonnull out_status
@@ -843,6 +886,30 @@ void ffi_clip_ffi_rust_future_free_void(uint64_t handle
 void ffi_clip_ffi_rust_future_complete_void(uint64_t handle, RustCallStatus *_Nonnull out_status
 );
 #endif
+#ifndef UNIFFI_FFIDEF_UNIFFI_CLIP_FFI_CHECKSUM_FUNC_FFI_BLE_BEACON_TOKEN
+#define UNIFFI_FFIDEF_UNIFFI_CLIP_FFI_CHECKSUM_FUNC_FFI_BLE_BEACON_TOKEN
+uint16_t uniffi_clip_ffi_checksum_func_ffi_ble_beacon_token(void
+    
+);
+#endif
+#ifndef UNIFFI_FFIDEF_UNIFFI_CLIP_FFI_CHECKSUM_FUNC_FFI_BLE_CHAR_UUID
+#define UNIFFI_FFIDEF_UNIFFI_CLIP_FFI_CHECKSUM_FUNC_FFI_BLE_CHAR_UUID
+uint16_t uniffi_clip_ffi_checksum_func_ffi_ble_char_uuid(void
+    
+);
+#endif
+#ifndef UNIFFI_FFIDEF_UNIFFI_CLIP_FFI_CHECKSUM_FUNC_FFI_BLE_CHUNK_ENVELOPE
+#define UNIFFI_FFIDEF_UNIFFI_CLIP_FFI_CHECKSUM_FUNC_FFI_BLE_CHUNK_ENVELOPE
+uint16_t uniffi_clip_ffi_checksum_func_ffi_ble_chunk_envelope(void
+    
+);
+#endif
+#ifndef UNIFFI_FFIDEF_UNIFFI_CLIP_FFI_CHECKSUM_FUNC_FFI_BLE_SERVICE_UUID
+#define UNIFFI_FFIDEF_UNIFFI_CLIP_FFI_CHECKSUM_FUNC_FFI_BLE_SERVICE_UUID
+uint16_t uniffi_clip_ffi_checksum_func_ffi_ble_service_uuid(void
+    
+);
+#endif
 #ifndef UNIFFI_FFIDEF_UNIFFI_CLIP_FFI_CHECKSUM_FUNC_FFI_NEW_DEVICE_ID
 #define UNIFFI_FFIDEF_UNIFFI_CLIP_FFI_CHECKSUM_FUNC_FFI_NEW_DEVICE_ID
 uint16_t uniffi_clip_ffi_checksum_func_ffi_new_device_id(void
@@ -864,6 +931,12 @@ uint16_t uniffi_clip_ffi_checksum_func_ffi_protocol_version(void
 #ifndef UNIFFI_FFIDEF_UNIFFI_CLIP_FFI_CHECKSUM_FUNC_FFI_RGBA_TO_PNG
 #define UNIFFI_FFIDEF_UNIFFI_CLIP_FFI_CHECKSUM_FUNC_FFI_RGBA_TO_PNG
 uint16_t uniffi_clip_ffi_checksum_func_ffi_rgba_to_png(void
+    
+);
+#endif
+#ifndef UNIFFI_FFIDEF_UNIFFI_CLIP_FFI_CHECKSUM_METHOD_FFIBLEREASSEMBLER_PUSH_CHUNK
+#define UNIFFI_FFIDEF_UNIFFI_CLIP_FFI_CHECKSUM_METHOD_FFIBLEREASSEMBLER_PUSH_CHUNK
+uint16_t uniffi_clip_ffi_checksum_method_ffiblereassembler_push_chunk(void
     
 );
 #endif
@@ -1074,6 +1147,12 @@ uint16_t uniffi_clip_ffi_checksum_method_ffirelayclient_next_event(void
 #ifndef UNIFFI_FFIDEF_UNIFFI_CLIP_FFI_CHECKSUM_METHOD_FFIRELAYCLIENT_PUBLISH
 #define UNIFFI_FFIDEF_UNIFFI_CLIP_FFI_CHECKSUM_METHOD_FFIRELAYCLIENT_PUBLISH
 uint16_t uniffi_clip_ffi_checksum_method_ffirelayclient_publish(void
+    
+);
+#endif
+#ifndef UNIFFI_FFIDEF_UNIFFI_CLIP_FFI_CHECKSUM_CONSTRUCTOR_FFIBLEREASSEMBLER_NEW
+#define UNIFFI_FFIDEF_UNIFFI_CLIP_FFI_CHECKSUM_CONSTRUCTOR_FFIBLEREASSEMBLER_NEW
+uint16_t uniffi_clip_ffi_checksum_constructor_ffiblereassembler_new(void
     
 );
 #endif
