@@ -61,12 +61,26 @@ ClipBridge seamlessly and securely syncs your clipboard across **macOS**, **Andr
 
 Pre-compiled production binaries are available in the [GitHub Releases](https://github.com/VQToan/clipbridge/releases) section:
 
+- **macOS (Apple Silicon & Intel)**: Download `ClipBridge-macOS.dmg` or `ClipBridge-macOS.zip`.
 - **Android**: Download and install `clipbridge.apk`.
 - **Linux (x86_64)**: Download `clipbridge-linux-x86_64` (supports Ubuntu, Debian, Fedora, Arch, etc.).
 
 ---
 
-### 1. Android Installation
+### 1. macOS Installation
+1. Download **`ClipBridge-macOS.dmg`** from [Releases](https://github.com/VQToan/clipbridge/releases/tag/v0.1.0).
+2. Drag **ClipBridge.app** into `/Applications`.
+3. Because the release is self-signed (ad-hoc signed, no paid Apple Developer ID needed), on first launch macOS Gatekeeper may show a warning:
+   - **Option 1**: Right-click (or Control-click) **ClipBridge.app** $\rightarrow$ select **Open** $\rightarrow$ click **Open**.
+   - **Option 2** (via Terminal):
+     ```bash
+     xattr -cr /Applications/ClipBridge.app
+     ```
+4. ClipBridge will appear directly in your macOS Menu Bar (paperclip icon).
+
+---
+
+### 2. Android Installation
 ```bash
 # Install via ADB or download directly on your phone
 adb install -r clipbridge.apk
@@ -79,7 +93,7 @@ adb install -r clipbridge.apk
 
 ---
 
-### 2. Linux Setup
+### 3. Linux Setup
 ```bash
 # Make binary executable and move to PATH
 chmod +x clipbridge-linux-x86_64
@@ -96,8 +110,8 @@ clipbridge watch
 
 ---
 
-### 3. macOS Setup
-Build directly using the Xcode toolchain:
+### 4. Build From Source
+#### macOS
 ```bash
 cd apps/macos
 DEVELOPER_DIR=/Applications/Xcode.app/Contents/Developer xcrun swift build -c release
