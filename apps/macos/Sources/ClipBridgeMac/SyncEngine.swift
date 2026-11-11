@@ -107,15 +107,102 @@ final class SyncEngine: ObservableObject {
     func joinGroup(pairingUri: String) throws {
         let pairInfo = try FfiPairingInfo.fromUri(uri: pairingUri)
         let key = try pairInfo.groupKey()
-        let deviceId = ffiNewDeviceId()
-        let deviceName = Host.current().localizedName ?? "Mac"
+        applyNewGroupConfig(key: key, relayUrl: pairInfo.relayUrl())
+    }
+
+    func createPairingCode() async throws -> String {
+        guard let cfg = config, let key = groupKey else {
+            throw NSError(domain: "ClipBridge", code: -1, userInfo: [NSLocalizedDescriptionKey: "No active group key"])
+        }
+        let httpBase = cfg.relayUrl.replacingOccurrences(of: "wss://", with: "https://").replacingOccurrences(of: "ws://", with: "http://")
+        guard let url = URL(string: "\(httpBase)/v1/pair/create") else {
+            throw NSError(domain: "ClipBridge", code: -1, userInfo: [NSLocalizedDescriptionKey: "Invalid relay URL"])
+        }
+        var req = URLRequest(url: url)
+        req.httpMethod = "POST"
+        req.setValue("application/json", forHTTPHeaderField: "Content-Type")
+        let payload: [String: Any] = [
+            "group_key": key.toBase64url(),
+            "relay_url": cfg.relayUrl
+        ]
+        req.httpBody = try JSONSerialization.data(withJSONObject: payload)
+
+        let (data, res) = try await URLSession.shared.data(for: req)
+        guard let httpRes = res as? HTTPURLResponse, httpRes.statusCode == 200 else {
+            throw NSError(domain: "ClipBridge", code: -1, userInfo: [NSLocalizedDescriptionKey: "Failed to create pairing code"])
+        }
+        guard let json = try JSONSerialization.jsonObject(with: data) as? [String: Any],
+              let code = json["code"] as? String else {
+            throw NSError(domain: "ClipBridge", code: -1, userInfo: [NSLocalizedDescriptionKey: "Invalid server response"])
+        }
+        return code
+    }
+
+    func joinWithCodeOrKey(_ input: String) async throws {
+        let cleaned = input.trimmingCharacters(in: .whitespacesAndNewlines)
+        let normalizedCode = cleaned.replacingOccurrences(of: "-", with: "").replacingOccurrences(of: " ", with: "").uppercased()
+
+        // 1. If 6-8 alphanumeric characters, claim from relay rendezvous
+        if normalizedCode.count >= 6 && normalizedCode.count <= 8 && normalizedCode.range(of: "^[0-9A-Z]{6,8}$", options: .regularExpression) != nil {
+            let httpBase = (config?.relayUrl ?? "wss://clipbridge-relay.vqtoan1807.workers.dev")
+                .replacingOccurrences(of: "wss://", with: "https://")
+                .replacingOccurrences(of: "ws://", with: "http://")
+            guard let url = URL(string: "\(httpBase)/v1/pair/claim") else {
+                throw NSError(domain: "ClipBridge", code: -1, userInfo: [NSLocalizedDescriptionKey: "Invalid relay URL"])
+            }
+            var req = URLRequest(url: url)
+            req.httpMethod = "POST"
+            req.setValue("application/json", forHTTPHeaderField: "Content-Type")
+            let payload: [String: Any] = ["code": normalizedCode]
+            req.httpBody = try JSONSerialization.data(withJSONObject: payload)
+
+            let (data, res) = try await URLSession.shared.data(for: req)
+            guard let httpRes = res as? HTTPURLResponse, httpRes.statusCode == 200 else {
+                let errObj = (try? JSONSerialization.jsonObject(with: data) as? [String: Any])?["error"] as? String
+                throw NSError(domain: "ClipBridge", code: -1, userInfo: [NSLocalizedDescriptionKey: errObj ?? "Invalid or expired pairing code"])
+            }
+            guard let json = try JSONSerialization.jsonObject(with: data) as? [String: Any],
+                  let groupKeyStr = json["group_key"] as? String,
+                  let relayUrl = json["relay_url"] as? String else {
+                throw NSError(domain: "ClipBridge", code: -1, userInfo: [NSLocalizedDescriptionKey: "Malformed response from server"])
+            }
+
+            let key = try FfiGroupKey.fromBase64url(s: groupKeyStr)
+            applyNewGroupConfig(key: key, relayUrl: relayUrl)
+            return
+        }
+
+        // 2. If it is a full URI
+        if cleaned.hasPrefix("clipbridge://") {
+            try joinGroup(pairingUri: cleaned)
+            return
+        }
+
+        // 3. If raw 43-char base64url group key
+        if cleaned.count == 43 {
+            let key = try FfiGroupKey.fromBase64url(s: cleaned)
+            applyNewGroupConfig(key: key, relayUrl: config?.relayUrl ?? "wss://clipbridge-relay.vqtoan1807.workers.dev")
+            return
+        }
+
+        throw NSError(domain: "ClipBridge", code: -1, userInfo: [NSLocalizedDescriptionKey: "Invalid pairing code, group key, or URI"])
+    }
+
+    func createNewGroup() {
+        let key = FfiGroupKey.generate()
+        applyNewGroupConfig(key: key, relayUrl: config?.relayUrl ?? "wss://clipbridge-relay.vqtoan1807.workers.dev")
+    }
+
+    private func applyNewGroupConfig(key: FfiGroupKey, relayUrl: String) {
+        let deviceId = config?.deviceId ?? ffiNewDeviceId()
+        let deviceName = config?.deviceName ?? (Host.current().localizedName ?? "Mac")
         let newConfig = AppConfig(
             deviceId: deviceId,
             deviceName: deviceName,
-            relayUrl: pairInfo.relayUrl(),
+            relayUrl: relayUrl,
             groupKey: key.toBase64url()
         )
-        try newConfig.save()
+        try? newConfig.save()
         self.config = newConfig
         applyConfig(newConfig)
     }
@@ -159,7 +246,7 @@ final class SyncEngine: ObservableObject {
     private func startWatcher() {
         lastChangeCount = NSPasteboard.general.changeCount
         pasteboardTimer?.invalidate()
-        let timer = Timer(timeInterval: 0.4, repeats: true) { [weak self] _ in
+        let timer = Timer(timeInterval: 0.2, repeats: true) { [weak self] _ in
             Task { @MainActor [weak self] in
                 self?.pollPasteboard()
             }

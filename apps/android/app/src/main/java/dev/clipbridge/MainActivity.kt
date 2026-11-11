@@ -25,6 +25,7 @@ import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
+import kotlinx.coroutines.launch
 import uniffi.clip_ffi.FfiClipKind
 import uniffi.clip_ffi.FfiHistoryEntry
 import java.text.SimpleDateFormat
@@ -80,9 +81,13 @@ class MainActivity : ComponentActivity() {
 @Composable
 fun MainScreen(engine: SyncEngine) {
     val context = LocalContext.current
+    val scope = rememberCoroutineScope()
     val status by engine.status.collectAsState()
     val clips by engine.recentClips.collectAsState()
+
+    var showPairDialog by remember { mutableStateOf(false) }
     var showJoinDialog by remember { mutableStateOf(false) }
+    var showResetDialog by remember { mutableStateOf(false) }
 
     Scaffold(
         topBar = {
@@ -91,7 +96,12 @@ fun MainScreen(engine: SyncEngine) {
                 colors = TopAppBarDefaults.topAppBarColors(
                     containerColor = MaterialTheme.colorScheme.primaryContainer,
                     titleContentColor = MaterialTheme.colorScheme.onPrimaryContainer
-                )
+                ),
+                actions = {
+                    IconButton(onClick = { showResetDialog = true }) {
+                        Icon(Icons.Default.Refresh, contentDescription = "Tạo nhóm mới")
+                    }
+                }
             )
         }
     ) { paddingValues ->
@@ -114,9 +124,9 @@ fun MainScreen(engine: SyncEngine) {
                     onClick = {
                         val synced = engine.checkAndSyncClipboard()
                         if (synced) {
-                            Toast.makeText(context, "Clipboard synced to peers! 🚀", Toast.LENGTH_SHORT).show()
+                            Toast.makeText(context, "Đã gửi clipboard sang các thiết bị! 🚀", Toast.LENGTH_SHORT).show()
                         } else {
-                            Toast.makeText(context, "Clipboard already synced or empty", Toast.LENGTH_SHORT).show()
+                            Toast.makeText(context, "Clipboard không có nội dung mới", Toast.LENGTH_SHORT).show()
                         }
                     },
                     modifier = Modifier.weight(1.2f)
@@ -127,19 +137,12 @@ fun MainScreen(engine: SyncEngine) {
                 }
 
                 OutlinedButton(
-                    onClick = {
-                        val uri = engine.getPairingUri()
-                        if (uri != null) {
-                            val cm = context.getSystemService(Context.CLIPBOARD_SERVICE) as ClipboardManager
-                            cm.setPrimaryClip(ClipData.newPlainText("ClipBridge Pairing", uri))
-                            Toast.makeText(context, "Pairing link copied!", Toast.LENGTH_SHORT).show()
-                        }
-                    },
+                    onClick = { showPairDialog = true },
                     modifier = Modifier.weight(1f)
                 ) {
                     Icon(Icons.Default.Share, contentDescription = null, modifier = Modifier.size(16.dp))
                     Spacer(Modifier.width(4.dp))
-                    Text("Share", fontSize = 12.sp)
+                    Text("Ghép đôi", fontSize = 12.sp)
                 }
 
                 OutlinedButton(
@@ -148,7 +151,7 @@ fun MainScreen(engine: SyncEngine) {
                 ) {
                     Icon(Icons.Default.GroupAdd, contentDescription = null, modifier = Modifier.size(16.dp))
                     Spacer(Modifier.width(4.dp))
-                    Text("Join...", fontSize = 12.sp)
+                    Text("Tham gia", fontSize = 12.sp)
                 }
             }
 
@@ -190,12 +193,56 @@ fun MainScreen(engine: SyncEngine) {
         }
     }
 
+    if (showPairDialog) {
+        PairDialog(
+            engine = engine,
+            onDismiss = { showPairDialog = false }
+        )
+    }
+
     if (showJoinDialog) {
         JoinDialog(
             onDismiss = { showJoinDialog = false },
-            onJoin = { uri ->
-                val ok = engine.joinGroup(uri)
-                if (ok) showJoinDialog = false
+            onJoin = { input, onError ->
+                scope.launch {
+                    val (success, err) = engine.joinWithCodeOrKey(input)
+                    if (success) {
+                        Toast.makeText(context, "Đã tham gia nhóm thiết bị thành công! 🎉", Toast.LENGTH_SHORT).show()
+                        showJoinDialog = false
+                    } else {
+                        onError(err ?: "Không thể kết nối")
+                    }
+                }
+            }
+        )
+    }
+
+    if (showResetDialog) {
+        AlertDialog(
+            onDismissRequest = { showResetDialog = false },
+            title = { Text("Tạo nhóm thiết bị mới?") },
+            text = {
+                Text(
+                    "Tính năng này dùng khi bạn muốn tạo một bộ thiết bị riêng biệt (ví dụ chia sẻ app cho người khác). Các thiết bị đang kết nối vào nhóm cũ sẽ không thể đồng bộ nữa cho đến khi được ghép đôi lại.",
+                    fontSize = 13.sp
+                )
+            },
+            confirmButton = {
+                Button(
+                    colors = ButtonDefaults.buttonColors(containerColor = MaterialTheme.colorScheme.error),
+                    onClick = {
+                        engine.createNewGroup()
+                        Toast.makeText(context, "Đã tạo nhóm thiết bị mới!", Toast.LENGTH_SHORT).show()
+                        showResetDialog = false
+                    }
+                ) {
+                    Text("Tạo nhóm mới")
+                }
+            },
+            dismissButton = {
+                TextButton(onClick = { showResetDialog = false }) {
+                    Text("Hủy")
+                }
             }
         )
     }
@@ -244,11 +291,19 @@ fun StatusCard(status: ConnectionStatus, engine: SyncEngine) {
                     fontSize = 14.sp
                 )
                 Text(
-                    text = "Device ID: ${engine.deviceId.take(8)}...",
+                    text = "Mã thiết bị: ${engine.deviceId.take(8)}...",
                     fontSize = 11.sp,
                     fontFamily = FontFamily.Monospace,
                     color = MaterialTheme.colorScheme.outline
                 )
+                engine.groupKey?.toBase64url()?.let { k ->
+                    Text(
+                        text = "Mã nhóm: ${k.take(12)}...",
+                        fontSize = 10.sp,
+                        fontFamily = FontFamily.Monospace,
+                        color = MaterialTheme.colorScheme.outline
+                    )
+                }
             }
         }
     }
@@ -310,35 +365,165 @@ fun ClipItemCard(entry: FfiHistoryEntry, onClick: () -> Unit) {
 }
 
 @Composable
-fun JoinDialog(onDismiss: () -> Unit, onJoin: (String) -> Unit) {
-    var text by remember { mutableStateOf("") }
+fun PairDialog(engine: SyncEngine, onDismiss: () -> Unit) {
+    val context = LocalContext.current
+    var pairingCode by remember { mutableStateOf<String?>(null) }
+    var isLoading by remember { mutableStateOf(true) }
+    var errorMessage by remember { mutableStateOf<String?>(null) }
+
+    LaunchedEffect(Unit) {
+        val code = engine.createPairingCode()
+        if (code != null) {
+            pairingCode = code
+        } else {
+            errorMessage = "Không thể lấy mã ghép đôi từ máy chủ"
+        }
+        isLoading = false
+    }
 
     AlertDialog(
         onDismissRequest = onDismiss,
-        title = { Text("Join Group") },
+        title = { Text("Ghép đôi thiết bị mới") },
         text = {
-            Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
-                Text("Paste pairing URI (clipbridge://pair?d=...):", fontSize = 12.sp)
+            Column(
+                modifier = Modifier.fillMaxWidth(),
+                horizontalAlignment = Alignment.CenterHorizontally,
+                verticalArrangement = Arrangement.spacedBy(12.dp)
+            ) {
+                Text(
+                    text = "Nhập mã 6 số này trên máy tính hoặc thiết bị khác của bạn để kết nối vào chung nhóm:",
+                    fontSize = 12.sp,
+                    color = MaterialTheme.colorScheme.outline
+                )
+
+                if (isLoading) {
+                    CircularProgressIndicator(modifier = Modifier.size(36.dp))
+                } else if (pairingCode != null) {
+                    val formatted = if (pairingCode!!.length == 6) {
+                        "${pairingCode!!.take(3)} ${pairingCode!!.takeLast(3)}"
+                    } else pairingCode!!
+
+                    Text(
+                        text = formatted,
+                        fontSize = 32.sp,
+                        fontWeight = FontWeight.Bold,
+                        fontFamily = FontFamily.Monospace,
+                        letterSpacing = 4.sp,
+                        color = MaterialTheme.colorScheme.primary
+                    )
+
+                    Text(
+                        text = "Mã có hiệu lực trong 10 phút",
+                        fontSize = 11.sp,
+                        color = MaterialTheme.colorScheme.outline
+                    )
+
+                    Row(
+                        modifier = Modifier.fillMaxWidth(),
+                        horizontalArrangement = Arrangement.spacedBy(8.dp)
+                    ) {
+                        OutlinedButton(
+                            onClick = {
+                                val cm = context.getSystemService(Context.CLIPBOARD_SERVICE) as ClipboardManager
+                                cm.setPrimaryClip(ClipData.newPlainText("Pairing Code", pairingCode))
+                                Toast.makeText(context, "Đã sao chép mã 6 số!", Toast.LENGTH_SHORT).show()
+                            },
+                            modifier = Modifier.weight(1f)
+                        ) {
+                            Text("Chép mã", fontSize = 11.sp)
+                        }
+
+                        OutlinedButton(
+                            onClick = {
+                                val uri = engine.getPairingUri()
+                                if (uri != null) {
+                                    val cm = context.getSystemService(Context.CLIPBOARD_SERVICE) as ClipboardManager
+                                    cm.setPrimaryClip(ClipData.newPlainText("Pairing URI", uri))
+                                    Toast.makeText(context, "Đã sao chép link ghép đôi!", Toast.LENGTH_SHORT).show()
+                                }
+                            },
+                            modifier = Modifier.weight(1f)
+                        ) {
+                            Text("Chép link", fontSize = 11.sp)
+                        }
+                    }
+                } else {
+                    Text(
+                        text = errorMessage ?: "Lỗi kết nối",
+                        color = MaterialTheme.colorScheme.error,
+                        fontSize = 12.sp
+                    )
+                }
+            }
+        },
+        confirmButton = {
+            Button(onClick = onDismiss) {
+                Text("Đóng")
+            }
+        }
+    )
+}
+
+@Composable
+fun JoinDialog(onDismiss: () -> Unit, onJoin: (String, (String) -> Unit) -> Unit) {
+    var text by remember { mutableStateOf("") }
+    var isJoining by remember { mutableStateOf(false) }
+    var errorMsg by remember { mutableStateOf<String?>(null) }
+
+    AlertDialog(
+        onDismissRequest = { if (!isJoining) onDismiss() },
+        title = { Text("Tham gia nhóm thiết bị") },
+        text = {
+            Column(verticalArrangement = Arrangement.spacedBy(10.dp)) {
+                Text(
+                    "Nhập mã kết nối 6 số (ví dụ: 839 201), mã nhóm (Group Key) hoặc link ghép đôi từ thiết bị khác:",
+                    fontSize = 12.sp,
+                    color = MaterialTheme.colorScheme.outline
+                )
+
                 OutlinedTextField(
                     value = text,
-                    onValueChange = { text = it },
+                    onValueChange = {
+                        text = it
+                        errorMsg = null
+                    },
                     singleLine = false,
-                    maxLines = 4,
+                    maxLines = 3,
+                    placeholder = { Text("Ví dụ: 839 201 hoặc IdJwKRJ...", fontSize = 12.sp) },
                     modifier = Modifier.fillMaxWidth()
                 )
+
+                if (errorMsg != null) {
+                    Text(
+                        text = errorMsg!!,
+                        color = MaterialTheme.colorScheme.error,
+                        fontSize = 12.sp
+                    )
+                }
             }
         },
         confirmButton = {
             Button(
-                onClick = { onJoin(text.trim()) },
-                enabled = text.isNotBlank()
+                onClick = {
+                    isJoining = true
+                    errorMsg = null
+                    onJoin(text.trim()) { err ->
+                        isJoining = false
+                        errorMsg = err
+                    }
+                },
+                enabled = text.isNotBlank() && !isJoining
             ) {
-                Text("Join")
+                if (isJoining) {
+                    CircularProgressIndicator(modifier = Modifier.size(16.dp), color = MaterialTheme.colorScheme.onPrimary)
+                } else {
+                    Text("Kết nối")
+                }
             }
         },
         dismissButton = {
-            TextButton(onClick = onDismiss) {
-                Text("Cancel")
+            TextButton(onClick = onDismiss, enabled = !isJoining) {
+                Text("Hủy")
             }
         }
     )

@@ -35,6 +35,13 @@ class ClipboardSyncService : Service() {
         }
     }
 
+    override fun onTaskRemoved(rootIntent: Intent?) {
+        super.onTaskRemoved(rootIntent)
+        // Keep service alive and re-trigger foreground sync if app was swiped away
+        val engine = SyncEngine.getInstance(this)
+        engine.startSync()
+    }
+
     override fun onDestroy() {
         super.onDestroy()
         logcatMonitor?.stop()

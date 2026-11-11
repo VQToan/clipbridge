@@ -21,6 +21,26 @@ export default {
       });
     }
 
+    // Ephemeral pairing rendezvous endpoints (6-digit code pairing)
+    if (url.pathname === "/v1/pair/create" || url.pathname === "/v1/pair/claim") {
+      if (request.method === "OPTIONS") {
+        return new Response(null, {
+          status: 204,
+          headers: {
+            "Access-Control-Allow-Origin": "*",
+            "Access-Control-Allow-Methods": "POST, OPTIONS",
+            "Access-Control-Allow-Headers": "Content-Type",
+          },
+        });
+      }
+      if (request.method !== "POST") {
+        return new Response("Method not allowed", { status: 405 });
+      }
+      const doId = env.RELAY_GROUP.idFromName("__pairing_rendezvous__");
+      const stub = env.RELAY_GROUP.get(doId);
+      return stub.fetch(request);
+    }
+
     // WebSocket relay endpoint
     if (url.pathname === "/v1/ws") {
       const groupId = request.headers.get("X-ClipBridge-Group");

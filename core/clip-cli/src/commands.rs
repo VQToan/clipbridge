@@ -70,18 +70,28 @@ pub fn cmd_join(
         );
     }
 
-    let pairing = PairingInfo::from_uri(uri)
-        .context("invalid or unsupported pairing URI")?;
-    let key = pairing
-        .group_key()
-        .context("failed to decode group key from pairing URI")?;
+    let cleaned = uri.trim();
+    let (key, relay_url) = if cleaned.starts_with("clipbridge://") {
+        let pairing = PairingInfo::from_uri(cleaned)
+            .context("invalid or unsupported pairing URI")?;
+        let k = pairing
+            .group_key()
+            .context("failed to decode group key from pairing URI")?;
+        (k, pairing.relay_url)
+    } else if cleaned.len() == 43 {
+        let k = GroupKey::from_base64url(cleaned)
+            .context("invalid base64url group key")?;
+        (k, "wss://clipbridge-relay.vqtoan1807.workers.dev".to_string())
+    } else {
+        bail!("Invalid pairing URI or group key: '{}'. Expected 'clipbridge://pair?d=...' or 43-character base64url group key", cleaned);
+    };
 
     paths.ensure_dirs()?;
 
     let device_id = clip_core::new_device_id();
     let device_name = name.unwrap_or_else(default_device_name);
 
-    let cfg = AppConfig::new(&device_id, &device_name, &pairing.relay_url, &key)?;
+    let cfg = AppConfig::new(&device_id, &device_name, &relay_url, &key)?;
     cfg.save(&paths.config_file)?;
 
     let group_id = key.group_id();

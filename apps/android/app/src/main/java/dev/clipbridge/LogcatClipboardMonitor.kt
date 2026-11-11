@@ -47,15 +47,23 @@ class LogcatClipboardMonitor(private val context: Context) {
 
     private fun isClipboardLogLine(line: String): Boolean {
         val lower = line.lowercase()
-        return (lower.contains("clipboardservice") && (lower.contains("setprimaryclip") || lower.contains("notifyprimaryclipchanged") || lower.contains("primaryclipchanged"))) ||
-                lower.contains("semclipboard") ||
-                (lower.contains("clipboard") && lower.contains("primaryclip"))
+        return (lower.contains("clipboard") && (
+            lower.contains("primary") ||
+            lower.contains("setprimary") ||
+            lower.contains("checkandset") ||
+            lower.contains("changed") ||
+            lower.contains("setprimaryclip") ||
+            lower.contains("notifyprimaryclipchanged")
+        )) ||
+        lower.contains("semclipboard") ||
+        (lower.contains("clipboardservice") && !lower.contains("app-specific"))
     }
 
     private fun triggerSync() {
         val now = System.currentTimeMillis()
         if (now - lastTriggerTime < 600L) return
         lastTriggerTime = now
+        Log.i(TAG, "Triggering trampoline activity to capture clipboard...")
 
         try {
             val intent = Intent(context, ClipSyncTrampolineActivity::class.java).apply {

@@ -16,10 +16,92 @@ export class RelayGroup extends DurableObject<Env> {
 
   constructor(ctx: DurableObjectState, env: Env) {
     super(ctx, env);
+    this.ctx.blockConcurrencyWhile(async () => {
+      this.groupId = (await this.ctx.storage.get<string>("group_id")) || "";
+    });
   }
 
   async fetch(request: Request): Promise<Response> {
     const url = new URL(request.url);
+
+    // Ephemeral pairing rendezvous: create
+    if (url.pathname === "/v1/pair/create" && request.method === "POST") {
+      try {
+        const body: any = await request.json();
+        const code = body.code
+          ? body.code.toString().replace(/[\s-]/g, "").toUpperCase()
+          : String(Math.floor(100000 + Math.random() * 900000));
+
+        if (!/^[0-9A-Z]{6,8}$/.test(code)) {
+          return new Response(JSON.stringify({ error: "Code must be 6 to 8 alphanumeric characters" }), {
+            status: 400,
+            headers: { "Content-Type": "application/json", "Access-Control-Allow-Origin": "*" },
+          });
+        }
+        if (!body.group_key || body.group_key.length !== 43) {
+          return new Response(JSON.stringify({ error: "Invalid group_key" }), {
+            status: 400,
+            headers: { "Content-Type": "application/json", "Access-Control-Allow-Origin": "*" },
+          });
+        }
+
+        const relayUrl = body.relay_url || "wss://clipbridge-relay.vqtoan1807.workers.dev";
+        const expiresAt = Date.now() + 10 * 60 * 1000; // 10 minutes
+
+        await this.ctx.storage.put(`pair:${code}`, {
+          group_key: body.group_key,
+          relay_url: relayUrl,
+          expires_at: expiresAt,
+        });
+
+        return new Response(JSON.stringify({ status: "ok", code, expires_in_sec: 600 }), {
+          status: 200,
+          headers: { "Content-Type": "application/json", "Access-Control-Allow-Origin": "*" },
+        });
+      } catch (e: any) {
+        return new Response(JSON.stringify({ error: e.message || "Failed to create pairing" }), {
+          status: 500,
+          headers: { "Content-Type": "application/json", "Access-Control-Allow-Origin": "*" },
+        });
+      }
+    }
+
+    // Ephemeral pairing rendezvous: claim
+    if (url.pathname === "/v1/pair/claim" && request.method === "POST") {
+      try {
+        const body: any = await request.json();
+        const code = (body.code || "").toString().replace(/[\s-]/g, "").toUpperCase();
+        const pairData = await this.ctx.storage.get<{ group_key: string; relay_url: string; expires_at: number }>(`pair:${code}`);
+
+        if (!pairData || Date.now() > pairData.expires_at) {
+          if (pairData) await this.ctx.storage.delete(`pair:${code}`);
+          return new Response(JSON.stringify({ error: "Invalid or expired pairing code" }), {
+            status: 404,
+            headers: { "Content-Type": "application/json", "Access-Control-Allow-Origin": "*" },
+          });
+        }
+
+        // Single-use: delete after claim
+        await this.ctx.storage.delete(`pair:${code}`);
+
+        return new Response(
+          JSON.stringify({
+            status: "ok",
+            group_key: pairData.group_key,
+            relay_url: pairData.relay_url,
+          }),
+          {
+            status: 200,
+            headers: { "Content-Type": "application/json", "Access-Control-Allow-Origin": "*" },
+          }
+        );
+      } catch (e: any) {
+        return new Response(JSON.stringify({ error: e.message || "Failed to claim pairing" }), {
+          status: 500,
+          headers: { "Content-Type": "application/json", "Access-Control-Allow-Origin": "*" },
+        });
+      }
+    }
 
     // Only /v1/ws is handled inside the group Durable Object
     if (url.pathname !== "/v1/ws") {
@@ -36,6 +118,7 @@ export class RelayGroup extends DurableObject<Env> {
     const token = authHeader.startsWith("Bearer ") ? authHeader.slice(7) : "";
 
     this.groupId = groupId;
+    await this.ctx.storage.put("group_id", groupId);
 
     // 1. Validate headers
     if (!HEX64_REGEX.test(groupId)) {
@@ -75,6 +158,7 @@ export class RelayGroup extends DurableObject<Env> {
     const [client, server] = Object.values(pair);
 
     const attachment: SessionAttachment = {
+      groupId,
       deviceId,
       connectedAt: Date.now(),
       tokens: PUBLISH_BURST,
@@ -124,6 +208,7 @@ export class RelayGroup extends DurableObject<Env> {
     const env: Envelope = parsed.envelope;
     const attachment = ws.deserializeAttachment() as SessionAttachment | null;
     const sender = attachment?.deviceId || env.sender;
+    const expectedGroupId = attachment?.groupId || this.groupId || (await this.ctx.storage.get<string>("group_id"));
 
     // Validate Envelope
     if (env.v !== 1) {
@@ -138,7 +223,7 @@ export class RelayGroup extends DurableObject<Env> {
       this.sendError(ws, "invalid_envelope", "sender mismatch", env.id);
       return;
     }
-    if (!env.group_id || env.group_id !== this.groupId) {
+    if (!env.group_id || (expectedGroupId && env.group_id !== expectedGroupId)) {
       this.sendError(ws, "invalid_envelope", "group_id mismatch", env.id);
       return;
     }

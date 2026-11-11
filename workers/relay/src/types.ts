@@ -19,6 +19,7 @@ export type ServerFrame =
   | { type: "error"; code: string; message: string; id?: string };
 
 export interface SessionAttachment {
+  groupId: string;
   deviceId: string;
   connectedAt: number;
   tokens: number;
